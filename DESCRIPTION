@@ -1,0 +1,25 @@
+Package: RUVpbps
+Title: Pseudobulk pseudosamples for RUV
+Version: 0.0.0.9000
+Authors@R: 
+    person("Sofía", "Prieto León", , "prietolsofia@gmail.com", role = c("aut", "cre"),
+           comment = c(ORCID = "https://orcid.org/0009-0008-5072-2411"))
+Description: Create pseudosamples to implement RUV in pseudobulk analyses
+    with insufficient technical replicates
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports: 
+    BiocGenerics,
+    DelayedArray,
+    dplyr,
+    edgeR,
+    rlang,
+    Seurat,
+    SeuratObject,
+    tibble,
+    tidyr
+Depends: 
+    R (>= 3.5)
