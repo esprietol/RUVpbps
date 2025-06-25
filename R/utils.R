@@ -8,8 +8,8 @@
 #' @param subsample A `data.frame` or `tibble` containing single-cell data with columns for group, bsg (biological subgroup), sample identifiers and cell identifiers.
 #' @param pb_id A character string specifying the column name for biological replicate/sample identifier. Default is `"sample_cell"`.
 #' @param cell_id A character string specifying the column name for cell identifiers. Default is `"cell_id"`.
-#' @param seed A numeric value to set the random seed for reproducibility. Default is `1`.
-#' @param n An integer specifying how many pseudobulk pseudosamples to generate from each group. Default is `2`.
+#' @param seed A numeric value to set the random seed for reproducibility. Default is 1.
+#' @param n An integer specifying how many pseudobulk pseudosamples to generate from each group. Default is 1.
 #'
 #' @return A list of character vectors containing sampled cell IDs for each pseudobulk pseudosample.
 #'
@@ -17,7 +17,7 @@
 #' @importFrom tidyr all_of
 #' @keywords internal
 
-cellspbps <- function(subsample, pb_id = 'sample_cell', cell_id = 'cell_id', seed = 1, n = 2) {
+cellspbps <- function(subsample, pb_id = 'sample_cell', cell_id = 'cell_id', seed = 1, n = 1) {
 
   # compute the average number of cells per biological group
   total_cell <- subsample |>
@@ -53,40 +53,4 @@ cellspbps <- function(subsample, pb_id = 'sample_cell', cell_id = 'cell_id', see
   pseudo_samp <- unlist(pseudo_samp, recursive = FALSE)
 
   return(pseudo_samp)
-}
-
-#' Create a Pseudobulk Sample from a Seurat Object
-#'
-#' @description Aggregates counts for a set of sampled cells from a Seurat object into a pseudobulk pseudosample (PBPS).
-#'
-#' @param pseudo_samp A named list of character vectors containing sampled cell IDs for each pseudo-sample.
-#' @param Gr A character string indicating the name of the group to extract from `pseudo_samp`.
-#' @param ds A Seurat object containing the original expression data.
-#' @param cell_id A character string indicating the column in `ds@meta.data` containing cell IDs. Default is `"cell_id"`.
-#'
-#' @return A numeric vector with the pseudobulk counts (aggregated across cells) for the given group.
-#'
-#' @importFrom Seurat Idents GetAssayData
-#' @importFrom BiocGenerics subset
-#' @importFrom DelayedArray rowSums
-#' @keywords internal
-
-pbps <- function(pseudo_samp, Gr, ds, cell_id = "cell_id") {
-
-  # Mark cells included in the current pseudobulk sample
-  ds$orig.index <- ds@meta.data[[cell_id]] %in% pseudo_samp[[Gr]]
-
-  # Set identity and subset Seurat object
-  Seurat::Idents(ds) <- "orig.index"
-  origgcounts <- Seurat::GetAssayData(
-    object = BiocGenerics::subset(ds, idents = TRUE),
-    assay = "originalexp",
-    slot = "counts"
-  )
-
-  # Extract count matrix and aggregate
-  psscounts <- origgcounts[, pseudo_samp[[Gr]], drop = FALSE]
-  pssamp <- DelayedArray::rowSums(psscounts)
-
-  return(pssamp)
 }
