@@ -106,7 +106,7 @@ PCA_T4_plot
 
 ```
 
-There is unwanted variation in the dataset associated with the processing cohorts. We will therefore create pseudobulk pseudosamples (PBPS) to use as negative control samples in a method for batch correction such as RUVIII. 
+There is unwanted variation in the dataset associated with the processing cohorts. We will therefore create pseudobulk pseudosamples (PBPS) to use as negative control samples in a method for batch correction such as RUVIII [@ruv]. 
 
 ```{r}
 

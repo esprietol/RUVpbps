@@ -1,0 +1,46 @@
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+# RUVpbps
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+RUVpbps create pseudosamples to implement the RUVIII method \[Jacob et
+al., 2016\] in pseudobulk analyses with insufficient technical
+replicates.
+
+## Installation
+
+You can install the development version of RUVpbps from
+[GitHub](https://github.com/) with:
+
+``` r
+# install.packages("pak")
+pak::pak("esprietol/RUVpbps")
+```
+
+or
+
+``` r
+# install.packages("devtools")
+devtools::install_github("esprietol/RUVpbps")
+```
+
+## Example
+
+This is a basic example to generate pseudobulk pseudosamples (PBPS):
+
+``` r
+library(RUVpbps)
+data(dummysce)
+
+pbpsc <- gen_PBPS(dummysce, ctype='cg_cov', BioVar='cg_cov', NVar='Processing_Cohort', id_pb = 'sample_cell', id_sub = 'ind_cov', cell_id = 'cell_id', n = 1 )
+```
+
+## References
+
+Jacob, L., Gagnon-Bartsch, J.-P., & Speed, T. P. (2016). Correcting gene
+expression data when neither the unwanted variation nor the factor of
+interest are observed. *Biostatistics*, 17(1), 16–28.
+<https://doi.org/10.1093/biostatistics/kxv026>
