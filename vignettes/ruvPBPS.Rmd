@@ -1,6 +1,7 @@
 ---
 title: "ruvPBPS"
 output: rmarkdown::html_vignette
+bibliography: ref.bib
 vignette: >
   %\VignetteIndexEntry{ruvPBPS}
   %\VignetteEngine{knitr::rmarkdown}
@@ -17,9 +18,11 @@ knitr::opts_chunk$set(
 ```{r setup}
 
 library(RUVpbps)
+library(edgeR)
+library(scater)
 library(tidyr)
 library(dplyr)
-library(edgeR)
+
 
 ```
 
@@ -47,19 +50,19 @@ The process is summarised in the `gen_PBPS` function.
 
 # Workflow
 
-To use the `gen_PBPS` function, we required a `SeuratObject` with annotated cells from multiple samples and a meta.data slot with biological and technical covariates.
-In this case, we use the `dummysc` dataset included in this package to demostrate the process. Among other variables, the metadata of the file has a sample identifier: `ind_cov_batch_cov`, a subject identifier `ind_cov`, a technical variable `Processing_Cohort`, and a biological variable, that happens to be the cell annotation (or cell type) `cg_cov`.
+To use the `gen_PBPS` function, we required a `SingleCellExperiment` object with annotated cells from multiple samples along with other biological and technical sample-level covariates.
+In this case, we use the `dummysce` dataset included in this package to demostrate the process. Among other variables, the metadata of the file has a sample identifier: `ind_cov_batch_cov`, a subject identifier `ind_cov`, a technical variable `Processing_Cohort`, and a biological variable, that happens to be the cell annotation (or cell type) `cg_cov`.
 
 The samples are distributed in two processing cohorts. Two samples were taken from the same subject: 'IGTB195_IGTB195'. There are two cell types in the dataset, T4 and T8, and all samples have at least 394 cells from each cell type.
 
 
 ```{r}
 
-data(dummysc)
+data(dummysce)
 
-samples_info <- dummysc@meta.data[,c("ind_cov","ind_cov_batch_cov","cg_cov","sample_cell","Processing_Cohort")]
+samples_info <- colData(dummysce)[,c("ind_cov","ind_cov_batch_cov","cg_cov","sample_cell","Processing_Cohort")]
 
-group_by(samples_info, ind_cov_batch_cov, ind_cov, Processing_Cohort, cg_cov) |> summarise(n=n(),.groups = "drop") |>pivot_wider(names_from=cg_cov,values_from=n)
+as.data.frame(samples_info) |>group_by( ind_cov_batch_cov, ind_cov, Processing_Cohort, cg_cov) |> summarise(n=n(),.groups = "drop") |>pivot_wider(names_from=cg_cov,values_from=n)
 
 
 
@@ -67,36 +70,76 @@ group_by(samples_info, ind_cov_batch_cov, ind_cov, Processing_Cohort, cg_cov) |>
 
 
 
-We start by pseudobulking the single cell data based on the sample/cell type identifier `sample_cell`, we use DGEList objects to store the pseudobulk data.
+We start by pseudobulking the single cell data based on the sample/cell type identifier `sample_cell`, to later normalise and visualise the data.
 
 ```{r}
 
-PBC <- Seurat::AggregateExpression(dummysc, group.by = "sample_cell", return.seurat = FALSE)
+PBC <- aggregateAcrossCells(dummysce,samples_info[,"sample_cell"]) # Pseudobulk by cell type and sample id
+colData(PBC) <- colData(PBC)[,colSums(is.na(colData(PBC)))<nrow(colData(PBC))] # Remove cell level columns with NAs
 
-  # Identify sample-level covariates
-  unique_pb <- dummysc@meta.data |>
-    dplyr::group_by(sample_cell) |>
-    dplyr::summarise(dplyr::across(dplyr::everything(), dplyr::n_distinct), .groups = "drop") |>
-    dplyr::select(-sample_cell) |>
-    colSums()
-
-  metacovs <- c("sample_cell", names(unique_pb)[unique_pb == dplyr::n_distinct(dummysc@meta.data[["sample_cell"]])])
-
-  # Create DGEList
-  PBC <- edgeR::DGEList(counts = PBC[[1]], samples = unique(dummysc@meta.data[, metacovs]))
-  
+head(colData(PBC))
 
 ```
 
 
-Then we filter and normalise the pseudobulk counts, and visualise the data.
+Then we create a `DGEList` object to filter and normalise the pseudobulk counts, and visualise the data.
 
 ```{r}
 
-PBC_T4 <- PBC[rowSums(PBC$counts>=10)>=5,PBC$samples$cg_cov=="T4"]
+dge <- edgeR::DGEList(counts = counts(PBC), samples = colData(PBC))
 
-PBC_T4 <- calcNormFactors(PBC_T4,method="upperquartile")
 
+dge_T4 <- dge[rowSums(dge$counts>=10)>=5,dge$samples$cg_cov=="T4"]
+dge_T4 <- calcNormFactors(dge_T4,method="upperquartile")
+PCA_T4 <- calculatePCA(edgeR::cpm(dge_T4, log = TRUE),ncomponents=2) 
+
+PCA_T4_plot <- data.frame(PCA_T4) |>
+  tibble::rownames_to_column("sample_cell") |> # Add the metadata into this data frame; match by sample IDs
+  dplyr::inner_join(dge_T4$samples, by = "sample_cell") |>
+  ggplot(aes(x = PC1,y = PC2,color= Processing_Cohort)) + geom_point() + 
+    #ggtitle("Logcpm plot") +
+    labs(color = "Processing cohort", title = "Logcpm PCA plot T4") + 
+    theme_minimal()
+
+PCA_T4_plot
+
+
+```
+
+There is unwanted variation in the dataset associated with the processing cohorts. We will therefore create pseudobulk pseudosamples (PBPS) to use as negative control samples in a method for batch correction such as RUVIII. 
+
+```{r}
+
+
+PBC_PBPS <-gen_PBPS(counts=dummysce,
+        ctype='cg_cov',
+        BioVar='cg_cov',
+        NVar='Processing_Cohort',
+        id_pb = 'sample_cell',
+        id_sub = 'ind_cov',
+        cell_id = 'cell_id',
+        n = 10,
+        Seed = NULL)
+
+
+head(colData(PBC_PBPS[[1]]))
+
+dgePBPS_T4 <- edgeR::DGEList(counts = assay(PBC_PBPS[[1]]) , samples = colData(PBC_PBPS[[1]]))
+
+
+dgePBPS_T4 <- dgePBPS_T4[rowSums(dgePBPS_T4$counts>=10)>=5,]
+dgePBPS_T4 <- calcNormFactors(dgePBPS_T4,method="upperquartile")
+PCAPBPS_T4 <- calculatePCA(edgeR::cpm(dgePBPS_T4, log = TRUE),ncomponents=2) 
+
+PCAPBPS_T4_plot <- data.frame(PCAPBPS_T4) |>
+  tibble::rownames_to_column("sample_cell") |> # Add the metadata into this data frame; match by sample IDs
+  dplyr::inner_join(dgePBPS_T4$samples, by = "sample_cell") |>
+  ggplot(aes(x = PC1,y = PC2,color= Processing_Cohort)) + geom_point(aes(shape=as.factor(pbps))) + 
+    #ggtitle("Logcpm plot") +
+    labs(color = "Processing cohort", title = "Logcpm PCA plot T4", shape= 'PBPS') + 
+    theme_minimal()
+
+PCAPBPS_T4_plot
 
 ```
 

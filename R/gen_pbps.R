@@ -1,3 +1,5 @@
+setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
+
 .gen_PBPS <- function(counts,
                       PBC,
                       metadata,
@@ -68,6 +70,7 @@
   # Combine count matrices
 
   full_counts <- cbind(PBC, pbpscounts[rownames(PBC), ,drop = FALSE])
+  rownames(meta_samples) <- meta_samples[,id_pb]
   meta_samples <- meta_samples[colnames(full_counts),]
 
   return(list(
@@ -75,8 +78,6 @@
     metadata = meta_samples
   ))
 }
-
-
 
 #' Generate a pseudobulk dataset with pseudobulk pseudosamples to be used as negative control samples in the removal of unwanted variation
 #'
@@ -103,6 +104,8 @@
 #' @importFrom DelayedArray rowSums
 #' @importFrom SummarizedExperiment SummarizedExperiment
 #' @importFrom SingleCellExperiment SingleCellExperiment
+#' @importFrom S4Vectors SimpleList
+#' @importFrom BiocGenerics counts
 #' @examples
 #'
 #' data(dummysce)
@@ -126,10 +129,10 @@ setMethod(f = "gen_PBPS",
             ct <- levels(metadata[,ctype])
 
             PBC <- scuttle::aggregateAcrossCells(counts,metadata[,id_pb])
-            PBC <- Matrix::Matrix(counts(PBC), sparse = TRUE)
-            counts <- counts(counts)
+            PBC <- Matrix::Matrix(BiocGenerics::counts(PBC), sparse = TRUE)
+            counts <- BiocGenerics::counts(counts)
 
-            full_pbc <- gen_PBPS(counts = counts,
+            full_pbc <- .gen_PBPS(counts = counts,
                                  PBC = PBC,
                                  metadata = metadata,
                                  ctype = ctype,
@@ -141,7 +144,7 @@ setMethod(f = "gen_PBPS",
                                  n = n,
                                  Seed = Seed)
 
-            counts_pbc <- SummarizedExperiment::SummarizedExperiment(assays=SimpleList(counts=full_pbc$counts),colData=full_pbc$metadata)
+            counts_pbc <- SummarizedExperiment::SummarizedExperiment(assays=S4Vectors::SimpleList(counts=full_pbc$counts),colData=full_pbc$metadata)
 
             counts_pbc_list <- lapply(ct,function(x) counts_pbc[,full_pbc$metadata[,ctype]==x])
 

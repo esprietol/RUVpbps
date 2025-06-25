@@ -27,11 +27,11 @@ cellspbps <- function(subsample, pb_id = 'sample_cell', cell_id = 'cell_id', see
   subsample <- dplyr::left_join(subsample, total_cell, by = pb_id)
 
   avg_cell <- subsample |>
-    dplyr::group_by(.data$bsg) |>
+    dplyr::group_by(bsg) |>
     dplyr::summarise(avg_ncell = mean(ncell), .groups = "drop")
 
   avg_cell <- subsample |>
-    dplyr::select(.data$group, .data$bsg) |>
+    dplyr::select(group, bsg) |>
     dplyr::distinct() |>
     dplyr::left_join(avg_cell, by = "bsg")
 

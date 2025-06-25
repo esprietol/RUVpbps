@@ -9,7 +9,7 @@ cellspbps(
   pb_id = "sample_cell",
   cell_id = "cell_id",
   seed = 1,
-  n = 2
+  n = 1
 )
 }
 \arguments{
@@ -19,9 +19,9 @@ cellspbps(
 
 \item{cell_id}{A character string specifying the column name for cell identifiers. Default is \code{"cell_id"}.}
 
-\item{seed}{A numeric value to set the random seed for reproducibility. Default is \code{1}.}
+\item{seed}{A numeric value to set the random seed for reproducibility. Default is 1.}
 
-\item{n}{An integer specifying how many pseudobulk pseudosamples to generate from each group. Default is \code{2}.}
+\item{n}{An integer specifying how many pseudobulk pseudosamples to generate from each group. Default is 1.}
 }
 \value{
 A list of character vectors containing sampled cell IDs for each pseudobulk pseudosample.
