@@ -12,7 +12,7 @@
   id_pb,
   id_sub,
   cell_id = "cell_id",
-  n = 2,
+  n = 1,
   seed = NULL
 )
 }
@@ -25,10 +25,10 @@
 
 \item{NVar}{A character vector specifying variable name in the \code{colData} \code{DataFrame} with technical/nuisance variables (e.g., batch ID).}
 
-\item{id_pb}{A character string specifying the variable name in the \code{colData} \code{DataFrame} used as sample ID.}
+\item{id_pb}{A character string specifying the variable name in the \code{colData} \code{DataFrame} used to pseudobulk the data, usually a combination of the sample ID and cell type.}
 
 \item{id_sub}{A character string specifying the variable name in the \code{colData} \code{DataFrame} used as "subject-level" ID (e.g., patient ID).
-If only one sample per subject is measured, then \code{id_sub} equals \code{id_pb}.}
+If only one sample per subject is measured, then \code{id_sub} equals the sample ID.}
 
 \item{cell_id}{A character string indicating the variable name in the \code{colData} \code{DataFrame} used as cell ID. Defaults to \code{"cell_id"}}
 

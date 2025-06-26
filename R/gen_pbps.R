@@ -1,4 +1,6 @@
+
 setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
+
 
 .gen_PBPS <- function(counts,
                       PBC,
@@ -19,8 +21,15 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
     colSums()
 
   metacovs <- c(id_pb, names(unique_pb)[unique_pb == dplyr::n_distinct(metadata[[id_pb]])])
+  c_vars <- c(ctype,BioVar,NVar,id_pb,id_sub)
+  problematic_vars <- c_vars[!c_vars %in% metacovs]
+
+  if( length(problematic_vars)>0){
+    stop("Consider providing unique sample identifiers. The following variables have multiple categories/levels associated with the same sample ID: ", paste(problematic_vars, collapse = ", "))
+  }
 
   # Grouping metadata
+
   meta_samples <- unique(metadata[, metacovs])
   groups_info <- meta_samples |> # TODO: should meta_samples be replaced by metadata?
     dplyr::group_by(dplyr::across(dplyr::all_of(c(BioVar, NVar)))) |>
@@ -32,11 +41,16 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
 
   bsg.keep <- names(table(groups_info$bsg)[table(groups_info$bsg) > 1])
 
+  if (any(table(groups_info$bsg) < 2)) {
+    warning("Some biological groups have fewer than 2 samples and will not have pseudoreplicates.")
+  }
+
+
   metadata <- metadata |>
     dplyr::mutate(
       bsg = paste('bsg',!!!rlang::syms(BioVar), sep = "_"),
       group = paste('g', !!!rlang::syms(BioVar), !!!rlang::syms(NVar), sep = "_")
-    ) |>
+     )  |>
     dplyr::filter(bsg %in% bsg.keep)
 
   # Sample cells per group
@@ -44,11 +58,13 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
 
   # Aggregate pseudobulk pseudosamples
   pscounts <- lapply(cells_to_pbps, function (x) counts[, x, drop = FALSE])
-  # TODO: Why do you suddenly use DelayedArray here? I suggest replacing with base::rowSums(x)
-  # TODO: you do not need the drop=FALSE and this errors for me.
-  pbpscounts <- sapply(pscounts, function(x) base::rowSums(x))
+
+  # DelayedArray needed for sparse matrix
+
+  pbpscounts <- sapply(pscounts, function(x) DelayedArray::rowSums(x))
 
   # Metadata reconstruction
+
   pbps_info <- tibble::tibble(!!rlang::sym(id_pb) := colnames(pbpscounts)) |>
     dplyr::mutate(
       pseudosample = sub("\\..*$", "", .data[[id_pb]]),
@@ -59,6 +75,7 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
     dplyr::select(-nsample)
 
   # Add missing metadata columns
+
   miss_var <- setdiff(colnames(meta_samples), colnames(pbps_info))
   for (v in miss_var) pbps_info[[v]] <- NA
 
@@ -90,9 +107,9 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
 #' @param ctype A character string specifying the variable name in the `colData` `DataFrame` used to define the cell type.
 #' @param BioVar A character vector specifying variable name in the `colData` `DataFrame` with the biological variables (e.g., treatment).
 #' @param NVar A character vector specifying variable name in the `colData` `DataFrame` with technical/nuisance variables (e.g., batch ID).
-#' @param id_pb A character string specifying the variable name in the `colData` `DataFrame` used as sample ID.
+#' @param id_pb A character string specifying the variable name in the `colData` `DataFrame` used to pseudobulk the data, usually a combination of the sample ID and cell type.
 #' @param id_sub A character string specifying the variable name in the `colData` `DataFrame` used as "subject-level" ID (e.g., patient ID).
-#' If only one sample per subject is measured, then `id_sub` equals `id_pb`.
+#' If only one sample per subject is measured, then `id_sub` equals the sample ID.
 #' @param cell_id A character string indicating the variable name in the `colData` `DataFrame` used as cell ID. Defaults to `"cell_id"`
 #' @param n Number of pseudo-replicates to generate per group. Default is 2.
 #' @param seed Integer used to set the random seed for reproducibility.
@@ -105,16 +122,18 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
 #' @importFrom scuttle aggregateAcrossCells
 #' @importFrom Matrix Matrix
 #' @importFrom DelayedArray rowSums
-#' @importFrom SummarizedExperiment SummarizedExperiment
+#' @importFrom SummarizedExperiment SummarizedExperiment colData
 #' @importFrom SingleCellExperiment SingleCellExperiment
 #' @importFrom S4Vectors SimpleList
 #' @importFrom BiocGenerics counts
+#' @importFrom methods setGeneric setMethod
 #' @examples
 #'
 #' data(dummysce)
 #'
 #' pbpsc <- gen_PBPS(dummysce, ctype='cg_cov', BioVar='cg_cov', NVar='Processing_Cohort', id_pb = 'sample_cell', id_sub = 'ind_cov', cell_id = 'cell_id', n = 1 )
 #' @export
+
 setMethod(f = "gen_PBPS",
           signature = c(counts = "SingleCellExperiment"),
           definition = function(counts,
@@ -124,11 +143,26 @@ setMethod(f = "gen_PBPS",
                                 id_pb,
                                 id_sub,
                                 cell_id = 'cell_id',
-                                n = 2,
+                                n = 1,
                                 seed = NULL){
 
-            metadata <- as.data.frame(colData(counts))
-            ct <- levels(metadata[,ctype])
+            if (!inherits(counts, "SingleCellExperiment")) {
+              stop("'counts' must be a SingleCellExperiment object.")
+            }
+
+            metadata <- as.data.frame(SummarizedExperiment::colData(counts))
+
+            required_cols <- c(id_pb, id_sub, cell_id, BioVar, NVar)
+            missing_cols <- setdiff(required_cols, colnames(metadata))
+
+            if (length(missing_cols) > 0) {
+              stop(paste("The following columns are missing from metadata: ", paste(missing_cols, collapse = ", ")))
+            }
+
+            metadata <- metadata |>
+              dplyr::mutate(dplyr::across(all_of(required_cols), as.character))
+
+            ct <- unique(metadata[,ctype])
 
             PBC <- scuttle::aggregateAcrossCells(counts,metadata[,id_pb])
             PBC <- Matrix::Matrix(BiocGenerics::counts(PBC), sparse = TRUE)
@@ -136,9 +170,26 @@ setMethod(f = "gen_PBPS",
 
             # TODO: add some checks here like below to check if provided variable names
             # are indeed in the colData.
+
             if(!all(metadata[,cell_id] %in% colnames(counts))){
               stop("The provided cell_id's do not match with the column names of the counts.")
             }
+
+            unique_pb <- metadata |>
+              dplyr::group_by(!!rlang::sym(id_pb)) |>
+              dplyr::summarise(dplyr::across(dplyr::everything(), dplyr::n_distinct), .groups = "drop") |>
+              dplyr::select(-!!rlang::sym(id_pb)) |>
+              colSums()
+
+            metacovs <- c(id_pb, names(unique_pb)[unique_pb == dplyr::n_distinct(metadata[[id_pb]])])
+            c_vars <- c(ctype,BioVar,NVar,id_pb,id_sub)
+            problematic_vars <- c_vars[!c_vars %in% metacovs]
+
+            if( length(problematic_vars)>0){
+              msg <- paste("Consider providing unique sample identifiers. The following variables have multiple categories/levels associated with the same sample ID: ", paste(problematic_vars, collapse = ", "))
+              stop(msg)
+            }
+
 
             full_pbc <- .gen_PBPS(counts = counts,
                                  PBC = PBC,

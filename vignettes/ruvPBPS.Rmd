@@ -64,13 +64,18 @@ samples_info <- colData(dummysce)[,c("ind_cov","ind_cov_batch_cov","cg_cov","sam
 
 as.data.frame(samples_info) |>group_by( ind_cov_batch_cov, ind_cov, Processing_Cohort, cg_cov) |> summarise(n=n(),.groups = "drop") |>pivot_wider(names_from=cg_cov,values_from=n)
 
+```
 
+We combine the cell type and sample identifier into a variable used to pseudobulk the data, called `sample_cell`.
+
+```{r}
+
+samples_info$sample_cell <- paste(colData(dummysce)$ind_cov_batch_cov,colData(dummysce)$cg_cov,sep = "_")
 
 ```
 
 
-
-We start by pseudobulking the single cell data based on the sample/cell type identifier `sample_cell`, to later normalise and visualise the data.
+We pseudobulk, normalise and visualise the data.
 
 ```{r}
 
@@ -119,7 +124,7 @@ PBC_PBPS <-gen_PBPS(counts=dummysce,
         id_sub = 'ind_cov',
         cell_id = 'cell_id',
         n = 10,
-        Seed = NULL)
+        seed = NULL)
 
 
 head(colData(PBC_PBPS[[1]]))

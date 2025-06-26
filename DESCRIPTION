@@ -17,13 +17,15 @@ Suggests:
     rmarkdown,
     scater,
     Seurat,
-    SeuratObject
+    SeuratObject,
+    testthat (>= 3.0.0)
 VignetteBuilder: knitr
 Imports: 
     BiocGenerics,
     DelayedArray,
     dplyr,
     Matrix,
+    methods,
     rlang,
     S4Vectors,
     scuttle,
@@ -33,3 +35,4 @@ Imports:
     tidyr
 Depends: 
     R (>= 3.5)
+Config/testthat/edition: 3
