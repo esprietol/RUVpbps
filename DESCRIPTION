@@ -1,6 +1,6 @@
 Package: RUVpbps
 Title: Pseudobulk pseudosamples for RUV
-Version: 0.0.0.9000
+Version: 0.0.0.901
 Authors@R: 
     person("Sofía", "Prieto León", , "prietolsofia@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "https://orcid.org/0009-0008-5072-2411"))

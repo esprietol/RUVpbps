@@ -10,7 +10,7 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
                       id_sub = "ind_cov",
                       cell_id = "cell_id",
                       n = 1,
-                      Seed = NULL) {
+                      seed = NULL) {
   # Identify sample-level covariates
   unique_pb <- metadata |>
     dplyr::group_by(!!rlang::sym(id_pb)) |>
@@ -22,7 +22,7 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
 
   # Grouping metadata
   meta_samples <- unique(metadata[, metacovs])
-  groups_info <- meta_samples |>
+  groups_info <- meta_samples |> # TODO: should meta_samples be replaced by metadata?
     dplyr::group_by(dplyr::across(dplyr::all_of(c(BioVar, NVar)))) |>
     dplyr::summarise(nsample = dplyr::n(), .groups = "drop") |>
     dplyr::mutate(
@@ -40,12 +40,13 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
     dplyr::filter(bsg %in% bsg.keep)
 
   # Sample cells per group
-  cells_to_pbps <- cellspbps(subsample = metadata, seed = Seed, n = n, pb_id = id_pb, cell_id = cell_id)
+  cells_to_pbps <- cellspbps(subsample = metadata, seed = seed, n = n, pb_id = id_pb, cell_id = cell_id)
 
   # Aggregate pseudobulk pseudosamples
-
   pscounts <- lapply(cells_to_pbps, function (x) counts[, x, drop = FALSE])
-  pbpscounts <- sapply(pscounts, function(x) DelayedArray::rowSums(x,drop=FALSE))
+  # TODO: Why do you suddenly use DelayedArray here? I suggest replacing with base::rowSums(x)
+  # TODO: you do not need the drop=FALSE and this errors for me.
+  pbpscounts <- sapply(pscounts, function(x) base::rowSums(x))
 
   # Metadata reconstruction
   pbps_info <- tibble::tibble(!!rlang::sym(id_pb) := colnames(pbpscounts)) |>
@@ -63,6 +64,7 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
 
   pbps_info <- dplyr::mutate(pbps_info, pbps = 1)
 
+  # TODO: this errors for me.
   meta_samples <- meta_samples |>
     dplyr::mutate(pbps = 0, pseudosample = "orig") |>
     dplyr::bind_rows(pbps_info)
@@ -79,20 +81,21 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
   ))
 }
 
-#' Generate a pseudobulk dataset with pseudobulk pseudosamples to be used as negative control samples in the removal of unwanted variation
+#' @title Generate a pseudobulk dataset with pseudobulk pseudosamples to be used as negative control samples in the removal of unwanted variation
 #'
-#' @description This function orchestrates the process of creating pseudobulk pseudosamples (PBPS) from a `SingleCellExperiment` object and associated metadata.
-#' It combines sampling, aggregation, and metadata reconstruction, and returns a list, were each element is a  `SummarizedExperiment` object with the pseudobulk counts of a particular cell type.
+#' @description This function orchestrates the process of creating pseudobulk pseudosamples (PBPS) from a `SingleCellExperiment` object and associated cell-level metadata.
+#' It combines sampling, aggregation, and metadata reconstruction, and returns a list, were each element is a  `SummarizedExperiment` object containing the pseudobulk counts of a particular cell type.
 #' @rdname gen_PBPS
-#' @param counts A `SingleCellExperiment` object with the single-cell counts and cell level metadata stored in the `colData` slot.
-#' @param ctype A character string specifying the column in the `colData` `DataFrame` used to define the cell type.
-#' @param BioVar A character vector specifying column names in the `colData` `DataFrame` with the biological variables (e.g., treatment).
-#' @param NVar A character vector specifying column names in the `colData` `DataFrame` with technical/nuisance variables (e.g., batch ID).
-#' @param id_pb A character string specifying the column in the `colData` `DataFrame` used as sample ID.
-#' @param id_sub A character string specifying the column in the `colData` `DataFrame` used as "subject-level" ID (e.g., patient ID).
-#' @param cell_id A character string indicating the column in the `colData` `DataFrame` used as cell ID.
-#' @param n Number of pseudo-replicates to generate per group. Default is 1.
-#' @param Seed Integer used to set the random seed for reproducibility.
+#' @param counts A `SingleCellExperiment` object with the single-cell counts and cell-level metadata stored in the `colData` slot.
+#' @param ctype A character string specifying the variable name in the `colData` `DataFrame` used to define the cell type.
+#' @param BioVar A character vector specifying variable name in the `colData` `DataFrame` with the biological variables (e.g., treatment).
+#' @param NVar A character vector specifying variable name in the `colData` `DataFrame` with technical/nuisance variables (e.g., batch ID).
+#' @param id_pb A character string specifying the variable name in the `colData` `DataFrame` used as sample ID.
+#' @param id_sub A character string specifying the variable name in the `colData` `DataFrame` used as "subject-level" ID (e.g., patient ID).
+#' If only one sample per subject is measured, then `id_sub` equals `id_pb`.
+#' @param cell_id A character string indicating the variable name in the `colData` `DataFrame` used as cell ID. Defaults to `"cell_id"`
+#' @param n Number of pseudo-replicates to generate per group. Default is 2.
+#' @param seed Integer used to set the random seed for reproducibility.
 #'
 #' @return A list of `SummarizedExperiment` objects.
 #'
@@ -112,25 +115,30 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
 #'
 #' pbpsc <- gen_PBPS(dummysce, ctype='cg_cov', BioVar='cg_cov', NVar='Processing_Cohort', id_pb = 'sample_cell', id_sub = 'ind_cov', cell_id = 'cell_id', n = 1 )
 #' @export
-
 setMethod(f = "gen_PBPS",
           signature = c(counts = "SingleCellExperiment"),
           definition = function(counts,
                                 ctype='cg_cov',
                                 BioVar,
                                 NVar,
-                                id_pb = 'sample_cell',
-                                id_sub = 'ind_cov',
+                                id_pb,
+                                id_sub,
                                 cell_id = 'cell_id',
                                 n = 2,
-                                Seed = NULL){
+                                seed = NULL){
 
-            metadata <- as.data.frame(counts@colData)
+            metadata <- as.data.frame(colData(counts))
             ct <- levels(metadata[,ctype])
 
             PBC <- scuttle::aggregateAcrossCells(counts,metadata[,id_pb])
             PBC <- Matrix::Matrix(BiocGenerics::counts(PBC), sparse = TRUE)
             counts <- BiocGenerics::counts(counts)
+
+            # TODO: add some checks here like below to check if provided variable names
+            # are indeed in the colData.
+            if(!all(metadata[,cell_id] %in% colnames(counts))){
+              stop("The provided cell_id's do not match with the column names of the counts.")
+            }
 
             full_pbc <- .gen_PBPS(counts = counts,
                                  PBC = PBC,
@@ -142,7 +150,7 @@ setMethod(f = "gen_PBPS",
                                  id_sub = id_sub,
                                  cell_id = cell_id,
                                  n = n,
-                                 Seed = Seed)
+                                 seed = seed)
 
             counts_pbc <- SummarizedExperiment::SummarizedExperiment(assays=S4Vectors::SimpleList(counts=full_pbc$counts),colData=full_pbc$metadata)
 

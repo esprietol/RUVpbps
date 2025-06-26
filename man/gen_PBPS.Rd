@@ -9,38 +9,39 @@
   ctype = "cg_cov",
   BioVar,
   NVar,
-  id_pb = "sample_cell",
-  id_sub = "ind_cov",
+  id_pb,
+  id_sub,
   cell_id = "cell_id",
   n = 2,
-  Seed = NULL
+  seed = NULL
 )
 }
 \arguments{
-\item{counts}{A \code{SingleCellExperiment} object with the single-cell counts and cell level metadata stored in the \code{colData} slot.}
+\item{counts}{A \code{SingleCellExperiment} object with the single-cell counts and cell-level metadata stored in the \code{colData} slot.}
 
-\item{ctype}{A character string specifying the column in the \code{colData} \code{DataFrame} used to define the cell type.}
+\item{ctype}{A character string specifying the variable name in the \code{colData} \code{DataFrame} used to define the cell type.}
 
-\item{BioVar}{A character vector specifying column names in the \code{colData} \code{DataFrame} with the biological variables (e.g., treatment).}
+\item{BioVar}{A character vector specifying variable name in the \code{colData} \code{DataFrame} with the biological variables (e.g., treatment).}
 
-\item{NVar}{A character vector specifying column names in the \code{colData} \code{DataFrame} with technical/nuisance variables (e.g., batch ID).}
+\item{NVar}{A character vector specifying variable name in the \code{colData} \code{DataFrame} with technical/nuisance variables (e.g., batch ID).}
 
-\item{id_pb}{A character string specifying the column in the \code{colData} \code{DataFrame} used as sample ID.}
+\item{id_pb}{A character string specifying the variable name in the \code{colData} \code{DataFrame} used as sample ID.}
 
-\item{id_sub}{A character string specifying the column in the \code{colData} \code{DataFrame} used as "subject-level" ID (e.g., patient ID).}
+\item{id_sub}{A character string specifying the variable name in the \code{colData} \code{DataFrame} used as "subject-level" ID (e.g., patient ID).
+If only one sample per subject is measured, then \code{id_sub} equals \code{id_pb}.}
 
-\item{cell_id}{A character string indicating the column in the \code{colData} \code{DataFrame} used as cell ID.}
+\item{cell_id}{A character string indicating the variable name in the \code{colData} \code{DataFrame} used as cell ID. Defaults to \code{"cell_id"}}
 
-\item{n}{Number of pseudo-replicates to generate per group. Default is 1.}
+\item{n}{Number of pseudo-replicates to generate per group. Default is 2.}
 
-\item{Seed}{Integer used to set the random seed for reproducibility.}
+\item{seed}{Integer used to set the random seed for reproducibility.}
 }
 \value{
 A list of \code{SummarizedExperiment} objects.
 }
 \description{
-This function orchestrates the process of creating pseudobulk pseudosamples (PBPS) from a \code{SingleCellExperiment} object and associated metadata.
-It combines sampling, aggregation, and metadata reconstruction, and returns a list, were each element is a  \code{SummarizedExperiment} object with the pseudobulk counts of a particular cell type.
+This function orchestrates the process of creating pseudobulk pseudosamples (PBPS) from a \code{SingleCellExperiment} object and associated cell-level metadata.
+It combines sampling, aggregation, and metadata reconstruction, and returns a list, were each element is a  \code{SummarizedExperiment} object containing the pseudobulk counts of a particular cell type.
 }
 \examples{
 
