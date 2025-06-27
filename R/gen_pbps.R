@@ -59,9 +59,8 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
   # Aggregate pseudobulk pseudosamples
   pscounts <- lapply(cells_to_pbps, function (x) counts[, x, drop = FALSE])
 
-  # DelayedArray needed for sparse matrix
+  pbpscounts <- sapply(pscounts, function(x) Matrix::rowSums(x))
 
-  pbpscounts <- sapply(pscounts, function(x) DelayedArray::rowSums(x))
 
   # Metadata reconstruction
 
@@ -120,8 +119,7 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
 #' @importFrom tibble tibble
 #' @importFrom rlang sym syms :=
 #' @importFrom scuttle aggregateAcrossCells
-#' @importFrom Matrix Matrix
-#' @importFrom DelayedArray rowSums
+#' @importFrom Matrix Matrix rowSums
 #' @importFrom SummarizedExperiment SummarizedExperiment colData
 #' @importFrom SingleCellExperiment SingleCellExperiment
 #' @importFrom S4Vectors SimpleList
@@ -150,6 +148,12 @@ setMethod(f = "gen_PBPS",
               stop("'counts' must be a SingleCellExperiment object.")
             }
 
+            if(!ctype %in% BioVar){
+              BioVar <- c(ctype,BioVar)
+
+              message("Adding cell type to biological covariates")
+            }
+
             metadata <- as.data.frame(SummarizedExperiment::colData(counts))
 
             required_cols <- c(id_pb, id_sub, cell_id, BioVar, NVar)
@@ -167,9 +171,6 @@ setMethod(f = "gen_PBPS",
             PBC <- scuttle::aggregateAcrossCells(counts,metadata[,id_pb])
             PBC <- Matrix::Matrix(BiocGenerics::counts(PBC), sparse = TRUE)
             counts <- BiocGenerics::counts(counts)
-
-            # TODO: add some checks here like below to check if provided variable names
-            # are indeed in the colData.
 
             if(!all(metadata[,cell_id] %in% colnames(counts))){
               stop("The provided cell_id's do not match with the column names of the counts.")

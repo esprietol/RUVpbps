@@ -2,8 +2,8 @@
 
 exportMethods(gen_PBPS)
 importFrom(BiocGenerics,counts)
-importFrom(DelayedArray,rowSums)
 importFrom(Matrix,Matrix)
+importFrom(Matrix,rowSums)
 importFrom(S4Vectors,SimpleList)
 importFrom(SingleCellExperiment,SingleCellExperiment)
 importFrom(SummarizedExperiment,SummarizedExperiment)

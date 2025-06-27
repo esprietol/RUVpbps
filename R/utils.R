@@ -17,7 +17,7 @@
 #' @importFrom tidyr all_of
 #' @keywords internal
 
-cellspbps <- function(subsample, pb_id = 'sample_cell', cell_id = 'cell_id', seed = 1, n = 1) {
+cellspbps <- function(subsample, pb_id, cell_id, seed = 1, n = 1) {
 
   # compute the average number of cells per biological group
   total_cell <- subsample |>

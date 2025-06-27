@@ -4,13 +4,7 @@
 \alias{cellspbps}
 \title{select the cells to create pseudobulk pseudosamples.}
 \usage{
-cellspbps(
-  subsample,
-  pb_id = "sample_cell",
-  cell_id = "cell_id",
-  seed = 1,
-  n = 1
-)
+cellspbps(subsample, pb_id, cell_id, seed = 1, n = 1)
 }
 \arguments{
 \item{subsample}{A \code{data.frame} or \code{tibble} containing single-cell data with columns for group, bsg (biological subgroup), sample identifiers and cell identifiers.}
