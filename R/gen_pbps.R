@@ -104,13 +104,13 @@ setGeneric("gen_PBPS", function(counts, ...) standardGeneric("gen_PBPS"))
 #' @rdname gen_PBPS
 #' @param counts A `SingleCellExperiment` object with the single-cell counts and cell-level metadata stored in the `colData` slot.
 #' @param ctype A character string specifying the variable name in the `colData` `DataFrame` used to define the cell type.
-#' @param BioVar A character vector specifying variable name in the `colData` `DataFrame` with the biological variables (e.g., treatment).
-#' @param NVar A character vector specifying variable name in the `colData` `DataFrame` with technical/nuisance variables (e.g., batch ID).
+#' @param BioVar A character vector specifying the biological variable names in the `colData` `DataFrame` (e.g., treatment).
+#' @param NVar A character vector specifying the technical/nuisance variable names in the `colData` `DataFrame` (e.g., batch ID).
 #' @param id_pb A character string specifying the variable name in the `colData` `DataFrame` used to pseudobulk the data, usually a combination of the sample ID and cell type.
 #' @param id_sub A character string specifying the variable name in the `colData` `DataFrame` used as "subject-level" ID (e.g., patient ID).
 #' If only one sample per subject is measured, then `id_sub` equals the sample ID.
 #' @param cell_id A character string indicating the variable name in the `colData` `DataFrame` used as cell ID. Defaults to `"cell_id"`
-#' @param n Number of pseudo-replicates to generate per group. Default is 2.
+#' @param n Number of pseudo-replicates to generate per group. Default is 1.
 #' @param seed Integer used to set the random seed for reproducibility.
 #'
 #' @return A list of `SummarizedExperiment` objects.
