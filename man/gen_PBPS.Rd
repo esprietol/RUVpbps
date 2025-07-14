@@ -21,9 +21,9 @@
 
 \item{ctype}{A character string specifying the variable name in the \code{colData} \code{DataFrame} used to define the cell type.}
 
-\item{BioVar}{A character vector specifying variable name in the \code{colData} \code{DataFrame} with the biological variables (e.g., treatment).}
+\item{BioVar}{A character vector specifying the biological variable names in the \code{colData} \code{DataFrame} (e.g., treatment).}
 
-\item{NVar}{A character vector specifying variable name in the \code{colData} \code{DataFrame} with technical/nuisance variables (e.g., batch ID).}
+\item{NVar}{A character vector specifying the technical/nuisance variable names in the \code{colData} \code{DataFrame} (e.g., batch ID).}
 
 \item{id_pb}{A character string specifying the variable name in the \code{colData} \code{DataFrame} used to pseudobulk the data, usually a combination of the sample ID and cell type.}
 
@@ -32,7 +32,7 @@ If only one sample per subject is measured, then \code{id_sub} equals the sample
 
 \item{cell_id}{A character string indicating the variable name in the \code{colData} \code{DataFrame} used as cell ID. Defaults to \code{"cell_id"}}
 
-\item{n}{Number of pseudo-replicates to generate per group. Default is 2.}
+\item{n}{Number of pseudo-replicates to generate per group. Default is 1.}
 
 \item{seed}{Integer used to set the random seed for reproducibility.}
 }

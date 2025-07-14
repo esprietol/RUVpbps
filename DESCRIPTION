@@ -13,9 +13,12 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 biocViews:
 Suggests: 
+    cluster,
     edgeR,
+    factoextra,
     knitr,
     rmarkdown,
+    ruv,
     scater,
     Seurat,
     SeuratObject,

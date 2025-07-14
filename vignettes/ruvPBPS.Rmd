@@ -1,6 +1,9 @@
 ---
-title: "ruvPBPS"
-output: rmarkdown::html_vignette
+title: "Generating PBPS to use RUVIII in the absence of negative control samples"
+output: 
+  rmarkdown::html_vignette:
+    toc: true
+    fig_width: 6
 bibliography: ref.bib
 vignette: >
   %\VignetteIndexEntry{ruvPBPS}
@@ -11,14 +14,21 @@ vignette: >
 ```{r, include = FALSE,message=FALSE,warning=FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
+  message=FALSE,
+  warning=FALSE,
+  fig.align = 'center',
   comment = "#>"
 )
 ```
 
-```{r setup}
+```{r setup, message=FALSE,warning=FALSE}
 
 library(RUVpbps)
 library(edgeR)
+library(cluster)
+library(factoextra)
+library(Seurat)
+library(ruv)
 library(scater)
 library(tidyr)
 library(dplyr)
@@ -44,13 +54,16 @@ Let $\mathcal{C}$ represent the set of all cells in the dataset. The PBPS are cr
 
 6. Pseudobulk the cells from every random sample $i$, with $i=1,...,I$, to obtain the pseudobulk pseudosample $s'_{bli}$.
 
-At the end, we create a new count matrix $\mb{Y'}_p$ of size $(S + S')\times G$ containing pseudobulk counts from the $S$ original samples and the $S'$ new pseudosamples; note that the number of pseudosamples $S'$ is determined by the number of random samples $I$ and the number of $\mathcal{C}_{bl}$ sets. 
+At the end, we create a new count matrix $\textbf{Y'}_p$ of size $(S + S')\times G$ containing pseudobulk counts from the $S$ original samples and the $S'$ new pseudosamples; note that the number of pseudosamples $S'$ is determined by the number of random samples $I$ and the number of $\mathcal{C}_{bl}$ sets. 
 
 The process is summarised in the `gen_PBPS` function.
 
 # Workflow
 
 To use the `gen_PBPS` function, we required a `SingleCellExperiment` object with annotated cells from multiple samples along with other biological and technical sample-level covariates.
+
+## Dataset
+
 In this case, we use the `dummysce` dataset included in this package to demostrate the process. Among other variables, the metadata of the file has a sample identifier: `ind_cov_batch_cov`, a subject identifier `ind_cov`, a technical variable `Processing_Cohort`, and a biological variable, that happens to be the cell annotation (or cell type) `cg_cov`.
 
 The samples are distributed in two processing cohorts. Two samples were taken from the same subject: 'IGTB195_IGTB195'. There are two cell types in the dataset, T4 and T8, and all samples have at least 394 cells from each cell type.
@@ -62,7 +75,7 @@ data(dummysce)
 
 samples_info <- colData(dummysce)[,c("ind_cov","ind_cov_batch_cov","cg_cov","sample_cell","Processing_Cohort")]
 
-as.data.frame(samples_info) |>group_by( ind_cov_batch_cov, ind_cov, Processing_Cohort, cg_cov) |> summarise(n=n(),.groups = "drop") |>pivot_wider(names_from=cg_cov,values_from=n)
+as.data.frame(samples_info) |>group_by( ind_cov_batch_cov, ind_cov, Processing_Cohort, cg_cov) |> summarise(n=n(),.groups = "drop") |>pivot_wider(names_from=cg_cov,values_from=n) |> knitr::kable()
 
 ```
 
@@ -75,47 +88,112 @@ samples_info$sample_cell <- paste(colData(dummysce)$ind_cov_batch_cov,colData(du
 ```
 
 
-We pseudobulk, normalise and visualise the data.
+We pseudobulk and visualise the pseudobulk samples metadata.
 
 ```{r}
 
 PBC <- aggregateAcrossCells(dummysce,samples_info[,"sample_cell"]) # Pseudobulk by cell type and sample id
 colData(PBC) <- colData(PBC)[,colSums(is.na(colData(PBC)))<nrow(colData(PBC))] # Remove cell level columns with NAs
 
-head(colData(PBC))
+head(colData(PBC))|> knitr::kable()
 
 ```
 
 
-Then we create a `DGEList` object to filter and normalise the pseudobulk counts, and visualise the data.
+Let's first focus on the pseudobulk samples of cell type T4. We create a `DGEList` object to filter and normalise the pseudobulk counts, and visualise the samples.
 
-```{r}
+```{r, fig.show='hold'}
 
-dge <- edgeR::DGEList(counts = counts(PBC), samples = colData(PBC))
+PBC_T4 <- PBC[,colData(PBC)$cg_cov=='T4']
 
+dge <- edgeR::DGEList(counts = counts(PBC_T4), samples = colData(PBC_T4))
 
-dge_T4 <- dge[rowSums(dge$counts>=10)>=5,dge$samples$cg_cov=="T4"]
+dge_T4 <- dge[rowSums(dge$counts>=10)>=5,]
 dge_T4 <- calcNormFactors(dge_T4,method="upperquartile")
-PCA_T4 <- calculatePCA(edgeR::cpm(dge_T4, log = TRUE),ncomponents=2) 
+logdge_T4 <- edgeR::cpm(dge_T4, log = TRUE)
+
+top_high_varg.ct <- Seurat::FindVariableFeatures(logdge_T4)
+top_high_varg.ct <- rownames(arrange(top_high_varg.ct,-variance.standardized))[1:500]
+
+PCA_T4 <- calculatePCA(edgeR::cpm(dge_T4, log = TRUE), ncomponents=10, subset_row = top_high_varg.ct ) 
+
+PrCohort <- as.integer(dge_T4$samples$Processing_Cohort)
+PrCohort[PrCohort==2]<-3
+
+Sil_T4 <- cluster::silhouette(x=PrCohort,dist=dist(PCA_T4,"euclidean") )
+
+Sil_T4_plot <- factoextra::fviz_silhouette(Sil_T4)  + theme_minimal() +
+    theme(axis.text.x=element_blank(),legend.position = "bottom") +
+    labs(fill="Processing Cohort",color="Processing Cohort")
 
 PCA_T4_plot <- data.frame(PCA_T4) |>
   tibble::rownames_to_column("sample_cell") |> # Add the metadata into this data frame; match by sample IDs
-  dplyr::inner_join(dge_T4$samples, by = "sample_cell") |>
-  ggplot(aes(x = PC1,y = PC2,color= Processing_Cohort)) + geom_point() + 
-    #ggtitle("Logcpm plot") +
+  dplyr::inner_join(dge_T4$samples, by = "sample_cell") |> mutate(label=ifelse(ind_cov=='IGTB195_IGTB195','IGTB195','')) |>
+  ggplot(aes(x = PC1,y = PC2,color= Processing_Cohort,label=label)) + geom_point() + geom_text() +
     labs(color = "Processing cohort", title = "Logcpm PCA plot T4") + 
-    theme_minimal()
+    theme_minimal() + 
+  theme(legend.position = "bottom") 
 
 PCA_T4_plot
+
+Sil_T4_plot
 
 
 ```
 
-There is unwanted variation in the dataset associated with the processing cohorts. We will therefore create pseudobulk pseudosamples (PBPS) to use as negative control samples in a method for batch correction such as RUVIII [@ruv]. 
+The exploratory analysis of the dataset reveals unwanted variation associated with the processing cohorts: The silhouette plot indicates that samples from the same processing cohort cluster together, while samples from the same subject appear separated in the PCA plot. 
+
+## RUVIII
+
+To correct for this unwanted variation, we could leverage the fact that two samples from the same subject are available. These samples are expected to be biologically similar, so they can be treated as negative control samples. We apply the RUVIII method [@ruv], which uses negative control samples (in this case, the within-subject replicates) to estimate and remove unwanted variation.
+
+```{r, fig.show='hold'}
+
+k=1
+
+Mct <- replicate.matrix(dge_T4$samples$ind_cov)
+rownames(Mct) <- dge_T4$samples$ind_cov
+
+ruv3 <- RUVIII(Y=t(logdge_T4), M=Mct, ctl = rep(T,nrow(logdge_T4)), k=k)
+
+top_high_varg.ct <- Seurat::FindVariableFeatures(t(ruv3))
+top_high_varg.ct <- rownames(arrange(top_high_varg.ct,-variance.standardized))[1:500]
+
+PCAruvIII_T4 <- calculatePCA(t(ruv3),ncomponents=2,subset_row=top_high_varg.ct)
+
+SilruvIII_T4 <- cluster::silhouette(x=PrCohort,dist=dist(PCAruvIII_T4,"euclidean") )
+
+SilruvIII_T4_plot <- factoextra::fviz_silhouette(SilruvIII_T4)  + theme_minimal() +
+    theme(axis.text.x=element_blank(),legend.position = "bottom") +
+    labs(fill="Processing Cohort",color="Processing Cohort")
+
+PCAruvIII_T4_plot <- data.frame(PCAruvIII_T4 ) |>
+  tibble::rownames_to_column("sample_cell") |> # Add the metadata into this data frame; match by sample IDs
+  dplyr::inner_join(dge_T4$samples, by = "sample_cell") |> mutate(label=ifelse(ind_cov=='IGTB195_IGTB195','IGTB195',''))|> 
+  ggplot(aes(x = PC1,y = PC2,color= Processing_Cohort,label=label)) + geom_point() + geom_text(alpha=0.5) +
+    #ggtitle("Logcpm plot") +
+    labs(color = "Processing cohort", title = "Logcpm PCA plot T4") + 
+    theme_minimal() + 
+  theme(legend.position = "bottom") 
+
+SilruvIII_T4_plot
+PCAruvIII_T4_plot
+
+
+```
+
+The RUVIII method removes the unwanted variation between the samples from the same subject, and as observed in the silhouette width plot, reduces the strength of the processing cohort clustering.
+
+## RUVIII PBPS
+
+In many cases, datasets do not include negative control samples. As an alternative, we can generate pseudobulk pseudosamples (PBPS) and use them as negative control samples for estimating unwanted variation with the RUVIII method. 
+
+To do this, we use the gen_PBPS function, which creates PBPS from a SingleCellExperiment object and associated cell-level metadata. It combines sampling, aggregation, and metadata reconstruction, and returns a list, were each element is a SummarizedExperiment object containing the pseudobulk counts of a particular cell type.
+
 
 ```{r}
 
-
+ 
 PBC_PBPS <-gen_PBPS(counts=dummysce,
         ctype='cg_cov',
         BioVar='cg_cov',
@@ -127,24 +205,97 @@ PBC_PBPS <-gen_PBPS(counts=dummysce,
         seed = NULL)
 
 
-head(colData(PBC_PBPS[[1]]))
+head(colData(PBC_PBPS[[1]]))|> knitr::kable()
 
+```
+
+We repeat the filtering and normalisation steps, and visualise the pseudobulk samples and pseudobulk pseudosamples.
+
+```{r}
 dgePBPS_T4 <- edgeR::DGEList(counts = assay(PBC_PBPS[[1]]) , samples = colData(PBC_PBPS[[1]]))
 
 
 dgePBPS_T4 <- dgePBPS_T4[rowSums(dgePBPS_T4$counts>=10)>=5,]
 dgePBPS_T4 <- calcNormFactors(dgePBPS_T4,method="upperquartile")
-PCAPBPS_T4 <- calculatePCA(edgeR::cpm(dgePBPS_T4, log = TRUE),ncomponents=2) 
+logPBPS_T4 <- edgeR::cpm(dgePBPS_T4, log = TRUE)
+
+top_high_varg.ct <- Seurat::FindVariableFeatures(logPBPS_T4)
+top_high_varg.ct <- rownames(arrange(top_high_varg.ct,-variance.standardized))[1:500]
+
+PCAPBPS_T4 <- calculatePCA(edgeR::cpm(dgePBPS_T4, log = TRUE),ncomponents=10, subset_row=top_high_varg.ct) 
 
 PCAPBPS_T4_plot <- data.frame(PCAPBPS_T4) |>
   tibble::rownames_to_column("sample_cell") |> # Add the metadata into this data frame; match by sample IDs
-  dplyr::inner_join(dgePBPS_T4$samples, by = "sample_cell") |>
-  ggplot(aes(x = PC1,y = PC2,color= Processing_Cohort)) + geom_point(aes(shape=as.factor(pbps))) + 
+  dplyr::inner_join(dgePBPS_T4$samples, by = "sample_cell") |> mutate(label=ifelse(ind_cov=='IGTB195_IGTB195','IGTB195',''))|>
+  ggplot(aes(x = PC1,y = PC2,color= Processing_Cohort,label=label)) + geom_point(aes(shape=as.factor(pbps))) + 
     #ggtitle("Logcpm plot") +
     labs(color = "Processing cohort", title = "Logcpm PCA plot T4", shape= 'PBPS') + 
-    theme_minimal()
+    theme_minimal() + 
+  theme(legend.position = "bottom") 
 
 PCAPBPS_T4_plot
 
+
 ```
 
+Let's assume our dummy dataset has no technical replicates, and use exclusively the PBPS to remove the unwanted variation. This means that we will not include the samples from the same subject as negative control samples in the RUVIII method. This is merely done to prove the effectiveness of PBPS, but in practice, PBPS and true negative control samples can be combined.
+
+```{r}
+
+dgePBPS_T4$samples[which(dgePBPS_T4$samples$ind_cov_batch_cov=="IGTB195_IGTB195:dmx_AbFlare-3"),"ind_cov"] <- "IGTB195B" # we change the name of the second sample so it is not included as negative control sample. 
+
+Mct <- replicate.matrix(dgePBPS_T4$samples$ind_cov)
+rownames(Mct) <- dgePBPS_T4$samples$ind_cov
+
+ruv3 <- RUVIII(Y=t(logPBPS_T4), M=Mct, ctl = rep(T,nrow(logPBPS_T4)), k=k)
+
+# Do not use
+
+# PCAFULLPBPS_T4 <- calculatePCA(t(ruv3),ncomponents=2)
+# PCAFULLPBPS_T4_plot <- data.frame(PCAFULLPBPS_T4 ) |>
+#   tibble::rownames_to_column("sample_cell") |> # Add the metadata into this data frame; match by sample IDs
+#   dplyr::inner_join(dgePBPS_T4$samples, by = "sample_cell") |> mutate(label=ifelse(ind_cov=='IGTB195_IGTB195','IGTB195',''))|>
+#   ggplot(aes(x = PC1,y = PC2,color= Processing_Cohort)) + geom_point(aes(shape=as.factor(pbps))) + 
+#     #ggtitle("Logcpm plot") +
+#     labs(color = "Processing cohort", title = "Logcpm PCA plot T4", shape= 'PBPS') + 
+#     theme_minimal()
+
+```
+
+
+Keep in mind that the PBPS are only used to compute the unwanted factors of the RUVIII method, and must be removed for downstream analyses. This can be easily achieved by filtering the output based on the sample metadata variable `pbps`.
+
+
+```{r, fig.show='hold'}
+
+top_high_varg.ct <- Seurat::FindVariableFeatures(t(ruv3)[,dgePBPS_T4$samples$pbps==0])
+top_high_varg.ct <- rownames(arrange(top_high_varg.ct,-variance.standardized))[1:500]
+
+PCAnormPBPS_T4 <- calculatePCA(t(ruv3)[,dgePBPS_T4$samples$pbps==0],ncomponents=10, subset_row=top_high_varg.ct)
+
+SilPBPS_T4 <- cluster::silhouette(x = PrCohort , dist = dist(PCAnormPBPS_T4,"euclidean") )
+
+SilPBPS_T4_plot <- factoextra::fviz_silhouette(SilPBPS_T4)  + theme_minimal() +
+    theme(axis.text.x=element_blank(),legend.position = "bottom") +
+    labs(fill="Processing Cohort",color="Processing Cohort")
+
+PCAnormPBPS_T4_plot <- data.frame(PCAnormPBPS_T4 ) |>
+  tibble::rownames_to_column("sample_cell") |> # Add the metadata into this data frame; match by sample IDs
+  dplyr::inner_join(dgePBPS_T4$samples[dgePBPS_T4$samples$pbps==0,], by = "sample_cell")|> mutate(label=ifelse(ind_cov=='IGTB195_IGTB195'|ind_cov=='IGTB195B','IGTB195','')) |>
+  ggplot(aes(x = PC1,y = PC2,color= Processing_Cohort,label=label)) + geom_point(aes(shape=as.factor(pbps))) + geom_text() +
+    #ggtitle("Logcpm plot") +
+    labs(color = "Processing cohort", title = "Logcpm PCA plot T4", shape= 'PBPS') + 
+    theme_minimal() + 
+  theme(legend.position = "bottom") 
+
+
+
+PCAnormPBPS_T4_plot
+SilPBPS_T4_plot
+
+
+```
+
+The RUVIII method with PBPS reduces the unwanted variation between the samples from the same subject (without using them as negative control samples), and as observed in the silhouette width plot, it reduces the strength of the processing cohort clustering, even more than the traditional RUVIII with no PBPS.
+
+# References
